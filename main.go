@@ -9,6 +9,8 @@ import (
     "os/exec"
     "strings"
     "errors"
+    "bufio"
+    "io"
 
     "github.com/mitchellh/cli"
 
@@ -42,6 +44,22 @@ func ffprobe(inPath string) (*containerType, error) {
     return &ct, nil
 }
 
+func readBuf (r *bufio.Reader, w *os.File) {
+    for {
+        str, err := r.ReadBytes('\n')
+        w.Write(str)
+        if err != nil {
+            if err == io.EOF {
+                //fmt.Println("EOF")
+                break
+            }
+            fmt.Printf("reading err: %v\n", err)
+            return
+        }
+    }
+    return
+}
+
 func convertFile(inPath string, outPath string) error {
 
     ct, err := ffprobe(inPath)
@@ -61,21 +79,45 @@ func convertFile(inPath string, outPath string) error {
     }
 
     args := make([]string, 0)
-    args = append(args, "-n", "-i", inPath)
+    args = append(args, "-stats", "-n", "-i", inPath)
     if len(opts.Vf) != 0 {
         args = append(args, "-vf", opts.Vf)
     }
     args = append(args, ffArgs...)
     args = append(args, outPath)
+
     fmt.Printf("Calling %v\n", args)
     ffmpeg := exec.Command("ffmpeg", args...)
-    stdout, err := ffmpeg.CombinedOutput()
+    //stdout, err := ffmpeg.CombinedOutput()
+    stdout, err := ffmpeg.StdoutPipe()
     if err != nil {
+        fmt.Println(err)
+        return nil
+    }
+
+    stderr, err := ffmpeg.StderrPipe()
+    if err != nil {
+        fmt.Println(err)
+        return nil
+    }
+
+    bout := bufio.NewReader(stdout)
+    berr := bufio.NewReader(stderr)
+    if err = ffmpeg.Start(); err != nil {
         fmt.Printf("ffmpeg exited with error = %v, skip\n", err)
         os.Remove(outPath)
         return nil
     }
-    fmt.Printf("Result: %v\n", string(stdout))
+
+    go readBuf(bout, os.Stdout)
+    go readBuf(berr, os.Stderr)
+
+    if err := ffmpeg.Wait(); err != nil {
+        fmt.Printf("ffmpeg exited with error = %v, skip\n", err)
+        os.Remove(outPath)
+        return nil
+    }
+    //fmt.Printf("Result: %v\n", string(stdout))
     return nil
 }
 
