@@ -11,6 +11,7 @@ import (
     "errors"
     "bufio"
     "io"
+    "log"
 
     "github.com/mitchellh/cli"
 
@@ -32,7 +33,7 @@ func ffprobe(inPath string) (*containerType, error) {
     var ct containerType
 
     args := []string{"-loglevel", "quiet", "-show_streams", "-select_streams", "v", "-print_format", "json", inPath}
-    ffmpeg := exec.Command("ffprobe", args...)
+    ffmpeg := exec.Command(ffprobePath, args...)
     stdout, err := ffmpeg.CombinedOutput()
     if err != nil {
         fmt.Printf("ffprobe does not recognize file '%v' (%v)\n", inPath, err)
@@ -87,7 +88,7 @@ func convertFile(inPath string, outPath string) error {
     args = append(args, outPath)
 
     fmt.Printf("Calling %v\n", args)
-    ffmpeg := exec.Command("ffmpeg", args...)
+    ffmpeg := exec.Command(ffmpegPath, args...)
     //stdout, err := ffmpeg.CombinedOutput()
     stdout, err := ffmpeg.StdoutPipe()
     if err != nil {
@@ -191,6 +192,36 @@ var ffmpegCodecArgs = map[string][]string {
     "default": { "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30"},
 }
 
+func lookupBin(bin string) (path string, err error) {
+    addPathes := []string{".", filepath.Join(".", "bin")}
+
+    fmt.Printf("Looking up path for %v\n", bin)
+    path, err = exec.LookPath(bin)
+    if err != nil {
+        fmt.Printf("Not found in $PATH, trying other pathes..\n")
+        for _, p := range addPathes {
+            path = filepath.Join(p, bin)
+            fi, err := os.Stat(path)
+            if err != nil {
+                continue
+            }
+            if fi.Mode() & 0111 == 0 {
+                fmt.Printf("Found %v, but it's not executable\n", path)
+                continue
+            }
+            fmt.Printf("Found %v\n", path)
+            return path, nil
+        }
+        if errors.Is(err, exec.ErrNotFound) {
+            err = fmt.Errorf("'%v' found neither in $PATH or in additional pathes %v\n", bin, addPathes)
+        }
+    }
+    return
+}
+
+var ffmpegPath string
+var ffprobePath string
+
 func main() {
     //flags.NewParser(, flags.Default)
 
@@ -217,6 +248,15 @@ func main() {
         os.Exit(1)
     }
 
+    ffmpegPath, err = lookupBin("ffmpeg")
+    if err != nil {
+        log.Fatal(err)
+    }
+    ffprobePath, err = lookupBin("ffprobe")
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf("Found ffmpeg %v and ffprobe %v\n", ffmpegPath, ffprobePath)
     fmt.Printf("ffmpeg extra arguments: %v\n", ffmpegUserArgs)
     if fi.IsDir() {
         fmt.Printf("Rotate all files in directory: %v\n", rootPath)
