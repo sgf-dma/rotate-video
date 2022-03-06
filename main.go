@@ -32,6 +32,7 @@ type containerType struct {
 var opts struct {
     In flags.Filename `short:"i" description:"Input filename" value-name:"FILE" required:"true"`
     Vf string `long:"vf" description:"FFmpeg -vf video filter string" value-name:"STRING"`
+    RotateIn string `long:"rotate-in" description:"Where to place rotated files." choice:"dir" choice:"here" default:"in-dir"`
 }
 
 var rootPath string
@@ -40,6 +41,12 @@ var ffmpegCodecArgs = map[string][]string {
     "h264": { "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30"},
     "default": { "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30"},
 }
+
+const rotatePlace = rotateInDir
+const (
+    rotateHere = iota
+    rotateInDir
+)
 
 var ffmpegPath string
 var ffprobePath string
@@ -135,7 +142,7 @@ func convertTo(inPath string, outPath string) error {
     berr := bufio.NewReader(stderr)
     if err = ffmpeg.Start(); err != nil {
         info(l, "ffmpeg exited with error = %v, skip\n", err)
-        os.Remove(outPath)
+        //os.Remove(outPath)
         return nil
     }
 
@@ -160,22 +167,34 @@ func convertTo(inPath string, outPath string) error {
 
     if err := ffmpeg.Wait(); err != nil {
         info(l, "ffmpeg exited with error = %v, skip\n", err)
-        os.Remove(outPath)
+        //os.Remove(outPath)
         return nil
     }
     //fmt.Printf("Result: %v\n", string(stdout))
     return nil
 }
 
+// Argument is assumed to be a file!
 func convertFile(path string) (err error) {
     l := log.New(os.Stderr, "convertFile(): ", logFlags)
+    var outPath string
 
-    ext := filepath.Ext(path)
-    s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "-rotated")
-    outPath := s + "-rotated" + ext
-    if path == outPath {
-        info(l, "File '%v' is rotation result, skip\n", path)
-        return nil
+    if rotatePlace == rotateHere {
+        ext := filepath.Ext(path)
+        s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "-rotated")
+        outPath = s + "-rotated" + ext
+        if path == outPath {
+            info(l, "File '%v' is rotation result, skip\n", path)
+            return nil
+        }
+    } else if rotatePlace == rotateInDir {
+        p := filepath.Join(filepath.Dir(path), "rotated")
+        err = os.Mkdir(p,  0770)
+        if err != nil && !errors.Is(err, fs.ErrExist) {
+            critln(l, err)
+            return err
+        }
+        outPath = filepath.Join(p, filepath.Base(path))
     }
 
     _, err = os.Stat(outPath)
