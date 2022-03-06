@@ -14,8 +14,6 @@ import (
     "log"
     "runtime"
 
-    "github.com/mitchellh/cli"
-
     "github.com/jessevdk/go-flags"
     "github.com/fatih/color"
     "encoding/json"
@@ -33,7 +31,7 @@ type containerType struct {
 
 var opts struct {
     In flags.Filename `short:"i" description:"Input filename" value-name:"FILE" required:"true"`
-    Vf string `long:"vf" description:"FFmpeg video filter"`
+    Vf string `long:"vf" description:"FFmpeg -vf video filter string" value-name:"STRING"`
 }
 
 var rootPath string
@@ -91,22 +89,6 @@ func ffprobe(inPath string) (*containerType, error) {
     return &ct, nil
 }
 
-func readBuf (r *bufio.Reader, w *os.File) {
-    for {
-        str, err := r.ReadBytes('\n')
-        w.Write(str)
-        if err != nil {
-            if err == io.EOF {
-                //fmt.Println("EOF")
-                break
-            }
-            fmt.Printf("reading err: %v\n", err)
-            return
-        }
-    }
-    return
-}
-
 func convertTo(inPath string, outPath string) error {
     l := log.New(os.Stderr, "convertTo(): ", logFlags)
 
@@ -155,6 +137,22 @@ func convertTo(inPath string, outPath string) error {
         info(l, "ffmpeg exited with error = %v, skip\n", err)
         os.Remove(outPath)
         return nil
+    }
+
+    readBuf := func (r *bufio.Reader, w *os.File) {
+        for {
+            str, err := r.ReadBytes('\n')
+            w.Write(str)
+            if err != nil {
+                if err == io.EOF {
+                    //fmt.Println("EOF")
+                    break
+                }
+                fmt.Printf("reading err: %v\n", err)
+                return
+            }
+        }
+        return
     }
 
     go readBuf(bout, os.Stdout)
@@ -210,26 +208,6 @@ func walkFiles(path string, d fs.DirEntry, err error) error {
     return convertFile(path)
 }
 
-type FooCommand struct {}
-
-func (cmd FooCommand) Help() string {
-    return "foo command help"
-}
-
-func (cmd FooCommand) Synopsis() string {
-    return "foo synopsis"
-}
-
-func (cmd FooCommand) Run(args []string) int {
-    fmt.Printf("foo command args: %v\n", args)
-    return 0
-}
-
-func fooCommandFactory() (cmd cli.Command, err error) {
-    var fooCmd FooCommand
-    return fooCmd, nil
-}
-
 func lookupBin(bin string) (path string, err error) {
     l := log.New(os.Stderr, "lookupBin(): ", logFlags)
     addPathes := []string{".", filepath.Join(".", "bin")}
@@ -262,7 +240,6 @@ func lookupBin(bin string) (path string, err error) {
 
 func main() {
     l := log.New(os.Stderr, "main(): ", logFlags)
-    //flags.NewParser(, flags.Default)
 
     optP := flags.NewParser(&opts, flags.Default | flags.IgnoreUnknown)
     args, err := optP.Parse()
@@ -272,8 +249,10 @@ func main() {
                 if flagsErr == flags.ErrHelp {
                     os.Exit(0)
                 }
+                //optP.WriteHelp(os.Stderr)
                 os.Exit(1)
             default:
+                //optP.WriteHelp(os.Stderr)
                 os.Exit(1)
         }
     }
@@ -316,21 +295,5 @@ func main() {
         debug(l, "Run command for SINGLE file %v\n", rootPath)
         convertFile(rootPath)
     }
-
-    /*
-        c := cli.NewCLI("app", "1.0.0")
-        c.Args = os.Args[1:]
-        c.Commands = map[string]cli.CommandFactory{
-                "foo": fooCommandFactory,
-                //"bar": barCommandFactory,
-        }
-
-        exitStatus, err := c.Run()
-        if err != nil {
-                fmt.Println(err)
-        }
-
-        os.Exit(exitStatus)
-        */
 }
 
