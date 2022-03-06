@@ -17,6 +17,7 @@ import (
     "github.com/mitchellh/cli"
 
     "github.com/jessevdk/go-flags"
+    "github.com/fatih/color"
     "encoding/json"
 )
 
@@ -47,6 +48,32 @@ var ffprobePath string
 
 var logFlags = log.Ltime | log.Lmsgprefix
 
+func debug(l *log.Logger, format string, a ...interface{}) {
+    color.Set(color.FgGreen)
+    l.Printf(format, a...)
+    color.Unset()
+}
+
+func info(l *log.Logger, format string, a ...interface{}) {
+    color.Set(color.FgCyan)
+    l.Printf(format, a...)
+    color.Unset()
+}
+
+func crit(l *log.Logger, format string, a ...interface{}) {
+    color.Set(color.FgRed)
+    l.Printf(format, a...)
+    color.Unset()
+    os.Exit(1)
+}
+
+func critln(l *log.Logger, a ...interface{}) {
+    color.Set(color.FgRed)
+    l.Println(a...)
+    color.Unset()
+    os.Exit(1)
+}
+
 func ffprobe(inPath string) (*containerType, error) {
     var ct containerType
     l := log.New(os.Stderr, "ffprobe(): ", logFlags)
@@ -55,12 +82,12 @@ func ffprobe(inPath string) (*containerType, error) {
     ffmpeg := exec.Command(ffprobePath, args...)
     stdout, err := ffmpeg.CombinedOutput()
     if err != nil {
-        l.Printf("ffprobe does not recognize file '%v' (%v)\n", inPath, err)
+        info(l, "ffprobe does not recognize file '%v' (%v)\n", inPath, err)
         return nil, err
     }
 
     json.Unmarshal(stdout, &ct)
-    l.Printf("ffprobe %#v\n", ct)
+    debug(l, "ffprobe %#v\n", ct)
     return &ct, nil
 }
 
@@ -107,25 +134,25 @@ func convertFile(inPath string, outPath string) error {
     args = append(args, ffArgs...)
     args = append(args, outPath)
 
-    l.Printf("Calling %v\n", args)
+    debug(l, "Calling ffmpeg with args: %v\n", args)
     ffmpeg := exec.Command(ffmpegPath, args...)
     //stdout, err := ffmpeg.CombinedOutput()
     stdout, err := ffmpeg.StdoutPipe()
     if err != nil {
-        l.Println(err)
-        return nil
+        critln(l, err)
+        return err
     }
 
     stderr, err := ffmpeg.StderrPipe()
     if err != nil {
-        l.Println(err)
-        return nil
+        critln(l, err)
+        return err
     }
 
     bout := bufio.NewReader(stdout)
     berr := bufio.NewReader(stderr)
     if err = ffmpeg.Start(); err != nil {
-        l.Printf("ffmpeg exited with error = %v, skip\n", err)
+        info(l, "ffmpeg exited with error = %v, skip\n", err)
         os.Remove(outPath)
         return nil
     }
@@ -134,7 +161,7 @@ func convertFile(inPath string, outPath string) error {
     go readBuf(berr, os.Stderr)
 
     if err := ffmpeg.Wait(); err != nil {
-        l.Printf("ffmpeg exited with error = %v, skip\n", err)
+        info(l, "ffmpeg exited with error = %v, skip\n", err)
         os.Remove(outPath)
         return nil
     }
@@ -150,13 +177,13 @@ const (
 func walkFiles(path string, d fs.DirEntry, err error) error {
     l := log.New(os.Stderr, "walkFiles(): ", logFlags)
 
-    l.Printf("Considering '%v'\n", path)
+    debug(l, "Considering '%v'\n", path)
     if path == rootPath {
         return nil
     }
 
     if path != rootPath && d.IsDir() {
-        l.Printf("Ignore sub-directory '%v'\n", path)
+        debug(l, "Ignore sub-directory '%v'\n", path)
         return fs.SkipDir
     }
 
@@ -164,17 +191,17 @@ func walkFiles(path string, d fs.DirEntry, err error) error {
     s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "-rotated")
     outPath := s + "-rotated" + ext
     if path == outPath {
-        l.Printf("File '%v' is rotation result, skip\n", path)
+        info(l, "File '%v' is rotation result, skip\n", path)
         return nil
     }
 
     _, err = os.Stat(outPath)
     if !errors.Is(err, os.ErrNotExist) {
         if err != nil {
-            l.Println(err)
+            critln(l, err)
             return err
         } else {
-            l.Printf("File '%v' is already rotated, skip\n", path)
+            info(l, "File '%v' is already rotated, skip\n", path)
             return nil
         }
     }
@@ -206,28 +233,28 @@ func lookupBin(bin string) (path string, err error) {
     l := log.New(os.Stderr, "lookupBin(): ", logFlags)
     addPathes := []string{".", filepath.Join(".", "bin")}
 
-    l.Printf("Looking up path for %v\n", bin)
+    debug(l, "Looking up path for %v\n", bin)
     path, err = exec.LookPath(bin)
     if err != nil {
-        l.Printf("Not found in $PATH, trying other pathes..\n")
+        debug(l, "Not found in $PATH, trying other pathes..\n")
         for _, p := range addPathes {
             path = filepath.Join(p, bin)
             fi, err := os.Stat(path)
             if err != nil {
                 continue
             }
-            if fi.Mode() & 0111 == 0 {
-                l.Printf("Found %v, but it's not executable\n", path)
+            if runtime.GOOS != "windows" && fi.Mode() & 0111 == 0 {
+                debug(l, "Found %v, but it's not executable (%v)\n", path, fi.Mode())
                 continue
             }
-            l.Printf("Found %v\n", path)
+            debug(l, "Found %v\n", path)
             return path, nil
         }
         if errors.Is(err, exec.ErrNotFound) {
             err = fmt.Errorf("'%v' found neither in $PATH or in additional pathes %v\n", bin, addPathes)
         }
     } else {
-        l.Printf("Found %v\n", path)
+        debug(l, "Found %v\n", path)
     }
     return
 }
@@ -249,43 +276,43 @@ func main() {
                 os.Exit(1)
         }
     }
-    l.Printf("found options: %v\n", opts)
+    debug(l, "found options: %v\n", opts)
     ffmpegUserArgs = args
 
     rootPath = string(opts.In)
     fi, err := os.Stat(rootPath)
     if err != nil {
-        fmt.Println(err)
+        critln(l, err)
         os.Exit(1)
     }
 
     if runtime.GOOS == "windows" {
         ffmpegPath, err = lookupBin("ffmpeg.exe")
         if err != nil {
-            log.Fatal(err)
+            critln(l, err)
         }
         ffprobePath, err = lookupBin("ffprobe.exe")
         if err != nil {
-            log.Fatal(err)
+            critln(l, err)
         }
     } else {
         ffmpegPath, err = lookupBin("ffmpeg")
         if err != nil {
-            log.Fatal(err)
+            critln(l, err)
         }
         ffprobePath, err = lookupBin("ffprobe")
         if err != nil {
-            log.Fatal(err)
+            critln(l, err)
         }
     }
 
-    l.Printf("Found ffmpeg %v and ffprobe %v\n", ffmpegPath, ffprobePath)
-    l.Printf("ffmpeg extra arguments: %v\n", ffmpegUserArgs)
+    debug(l, "Found ffmpeg %v and ffprobe %v\n", ffmpegPath, ffprobePath)
+    debug(l, "ffmpeg extra arguments: %v\n", ffmpegUserArgs)
     if fi.IsDir() {
-        l.Printf("Rotate all files in directory: %v\n", rootPath)
+        debug(l, "Rotate all files in directory: %v\n", rootPath)
         filepath.WalkDir(rootPath, walkFiles)
     } else {
-        l.Printf("Run command for SINGLE file %v\n", rootPath)
+        debug(l, "Run command for SINGLE file %v\n", rootPath)
     }
 
     /*
