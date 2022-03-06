@@ -12,6 +12,7 @@ import (
     "bufio"
     "io"
     "log"
+    "runtime"
 
     "github.com/mitchellh/cli"
 
@@ -248,14 +249,26 @@ func main() {
         os.Exit(1)
     }
 
-    ffmpegPath, err = lookupBin("ffmpeg")
-    if err != nil {
-        log.Fatal(err)
+    if runtime.GOOS == "windows" {
+        ffmpegPath, err = lookupBin("ffmpeg.exe")
+        if err != nil {
+            log.Fatal(err)
+        }
+        ffprobePath, err = lookupBin("ffprobe.exe")
+        if err != nil {
+            log.Fatal(err)
+        }
+    } else {
+        ffmpegPath, err = lookupBin("ffmpeg")
+        if err != nil {
+            log.Fatal(err)
+        }
+        ffprobePath, err = lookupBin("ffprobe")
+        if err != nil {
+            log.Fatal(err)
+        }
     }
-    ffprobePath, err = lookupBin("ffprobe")
-    if err != nil {
-        log.Fatal(err)
-    }
+
     fmt.Printf("Found ffmpeg %v and ffprobe %v\n", ffmpegPath, ffprobePath)
     fmt.Printf("ffmpeg extra arguments: %v\n", ffmpegUserArgs)
     if fi.IsDir() {
