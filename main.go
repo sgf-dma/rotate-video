@@ -107,8 +107,8 @@ func readBuf (r *bufio.Reader, w *os.File) {
     return
 }
 
-func convertFile(inPath string, outPath string) error {
-    l := log.New(os.Stderr, "convertFile(): ", logFlags)
+func convertTo(inPath string, outPath string) error {
+    l := log.New(os.Stderr, "convertTo(): ", logFlags)
 
     ct, err := ffprobe(inPath)
     if err != nil {
@@ -169,23 +169,8 @@ func convertFile(inPath string, outPath string) error {
     return nil
 }
 
-const (
-    rotatedFile = iota
-    rotatedDir
-)
-
-func walkFiles(path string, d fs.DirEntry, err error) error {
-    l := log.New(os.Stderr, "walkFiles(): ", logFlags)
-
-    debug(l, "Considering '%v'\n", path)
-    if path == rootPath {
-        return nil
-    }
-
-    if path != rootPath && d.IsDir() {
-        debug(l, "Ignore sub-directory '%v'\n", path)
-        return fs.SkipDir
-    }
+func convertFile(path string) (err error) {
+    l := log.New(os.Stderr, "convertFile(): ", logFlags)
 
     ext := filepath.Ext(path)
     s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "-rotated")
@@ -206,7 +191,23 @@ func walkFiles(path string, d fs.DirEntry, err error) error {
         }
     }
 
-    return convertFile(path, outPath)
+    return convertTo(path, outPath)
+}
+
+func walkFiles(path string, d fs.DirEntry, err error) error {
+    l := log.New(os.Stderr, "walkFiles(): ", logFlags)
+
+    debug(l, "Considering '%v'\n", path)
+    if path == rootPath {
+        return nil
+    }
+
+    if path != rootPath && d.IsDir() {
+        debug(l, "Ignore sub-directory '%v'\n", path)
+        return fs.SkipDir
+    }
+
+    return convertFile(path)
 }
 
 type FooCommand struct {}
@@ -313,6 +314,7 @@ func main() {
         filepath.WalkDir(rootPath, walkFiles)
     } else {
         debug(l, "Run command for SINGLE file %v\n", rootPath)
+        convertFile(rootPath)
     }
 
     /*
