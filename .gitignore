@@ -1,5 +1,6 @@
 .*.sw*
 t/
+t2/
 rotate-video
 rotate-video.exe
 bin/
