@@ -32,7 +32,7 @@ type containerType struct {
 var opts struct {
     In flags.Filename `short:"i" description:"Input filename" value-name:"FILE" required:"true"`
     Vf string `long:"vf" description:"FFmpeg -vf video filter string" value-name:"STRING"`
-    RotateIn string `long:"rotate-in" description:"Where to place rotated files." choice:"dir" choice:"here" default:"in-dir"`
+    RotateIn rotatePlace `long:"rotate-in" description:"Where to place rotated files." choice:"dir" choice:"here" default:"dir"`
 }
 
 var rootPath string
@@ -42,11 +42,35 @@ var ffmpegCodecArgs = map[string][]string {
     "default": { "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30"},
 }
 
-const rotatePlace = rotateInDir
+type rotatePlace int
 const (
-    rotateHere = iota
+    rotateHere rotatePlace = iota
     rotateInDir
 )
+
+func (r *rotatePlace) MarshalFlag() (flag string, err error) {
+    switch *r {
+    case rotateHere:
+        flag = "here"
+    case rotateInDir:
+        flag = "dir"
+    default:
+        err = fmt.Errorf("Incorrect rotate value '%v'\n", *r)
+    }
+    return
+}
+
+func (r *rotatePlace) UnmarshalFlag(v string) (err error) {
+    switch v {
+    case "here":
+        *r = rotateHere
+    case "dir":
+        *r = rotateInDir
+    default:
+        err = fmt.Errorf("Unknown rotate flag value '%v'\n", v)
+    }
+    return
+}
 
 var ffmpegPath string
 var ffprobePath string
@@ -179,7 +203,8 @@ func convertFile(path string) (err error) {
     l := log.New(os.Stderr, "convertFile(): ", logFlags)
     var outPath string
 
-    if rotatePlace == rotateHere {
+    switch opts.RotateIn {
+    case rotateHere:
         ext := filepath.Ext(path)
         s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "-rotated")
         outPath = s + "-rotated" + ext
@@ -187,7 +212,7 @@ func convertFile(path string) (err error) {
             info(l, "File '%v' is rotation result, skip\n", path)
             return nil
         }
-    } else if rotatePlace == rotateInDir {
+    case rotateInDir:
         p := filepath.Join(filepath.Dir(path), "rotated")
         err = os.Mkdir(p,  0770)
         if err != nil && !errors.Is(err, fs.ErrExist) {
@@ -195,6 +220,8 @@ func convertFile(path string) (err error) {
             return err
         }
         outPath = filepath.Join(p, filepath.Base(path))
+    default:
+        critln(l, fmt.Errorf("Unknown rotate place '%v'\n", opts.RotateIn))
     }
 
     _, err = os.Stat(outPath)
@@ -275,7 +302,7 @@ func main() {
                 os.Exit(1)
         }
     }
-    debug(l, "found options: %v\n", opts)
+    debug(l, "found options: %+v\n", opts)
     ffmpegUserArgs = args
 
     rootPath = string(opts.In)
