@@ -47,6 +47,7 @@ const (
     rotateHere rotatePlace = iota
     rotateInDir
 )
+var rotatedSuffix = "rotated"
 
 func (r *rotatePlace) MarshalFlag() (flag string, err error) {
     switch *r {
@@ -206,14 +207,14 @@ func convertFile(path string) (err error) {
     switch opts.RotateIn {
     case rotateHere:
         ext := filepath.Ext(path)
-        s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "-rotated")
-        outPath = s + "-rotated" + ext
+        s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "-" + rotatedSuffix)
+        outPath = s + "-" + rotatedSuffix + ext
         if path == outPath {
             info(l, "File '%v' is rotation result, skip\n", path)
             return nil
         }
     case rotateInDir:
-        p := filepath.Join(filepath.Dir(path), "rotated")
+        p := filepath.Join(filepath.Dir(path), rotatedSuffix)
         err = os.Mkdir(p,  0770)
         if err != nil && !errors.Is(err, fs.ErrExist) {
             critln(l, err)
