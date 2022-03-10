@@ -38,8 +38,8 @@ var opts struct {
 var rootPath string
 var ffmpegUserArgs []string
 var ffmpegCodecArgs = map[string][]string {
-    "h264": { "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30"},
-    "default": { "-c:v", "libx264", "-preset", "ultrafast", "-crf", "30"},
+    "h264": { "-c:v", "libx264", "-preset", "slow", "-crf", "21"},
+    "default": { "-c:v", "libx264", "-preset", "slow", "-crf", "21"},
 }
 
 type rotatePlace int
