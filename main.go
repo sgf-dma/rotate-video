@@ -32,7 +32,7 @@ type containerType struct {
 var opts struct {
     In flags.Filename `short:"i" description:"Input filename" value-name:"FILE" required:"true"`
     Vf string `long:"vf" description:"FFmpeg -vf video filter string" value-name:"STRING"`
-    RotateIn rotatePlace `long:"rotate-in" description:"Where to place rotated files." choice:"dir" choice:"here" default:"dir"`
+    RotateIn rotatePlace `long:"rotate-in" description:"Where to place rotated files." choice:"dir" choice:"here" default:"here"`
 }
 
 var rootPath string
@@ -47,7 +47,7 @@ const (
     rotateHere rotatePlace = iota
     rotateInDir
 )
-var rotatedSuffix = "rotated"
+var rotatedSuffix = "ff"
 
 func (r *rotatePlace) MarshalFlag() (flag string, err error) {
     switch *r {
@@ -207,8 +207,8 @@ func convertFile(path string) (err error) {
     switch opts.RotateIn {
     case rotateHere:
         ext := filepath.Ext(path)
-        s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "-" + rotatedSuffix)
-        outPath = s + "-" + rotatedSuffix + ext
+        s := strings.TrimSuffix(strings.TrimSuffix(path, ext), "_" + rotatedSuffix)
+        outPath = s + "_" + rotatedSuffix + ext
         if path == outPath {
             info(l, "File '%v' is rotation result, skip\n", path)
             return nil
